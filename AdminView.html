@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="utf-8" />
+ <meta name="viewport" content="width=device-width, initial-scale=1" />
+ <title>Typhoon Hazard Alert Network — Prototype</title>
+ <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+ <link rel="stylesheet" href="style1.css">
+ <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+ <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.0.min.js"></script>
+ <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+ <div class="app" id="app">
+  <header class="glass-panel" role="banner">
+   <div class="brand">
+   <img src="earth4.gif" alt="THAN Logo" class="logo-img-header" id="logo-dark">
+     <img src="earthWhite.gif" alt="THAN Logo" class="logo-img-header" id="logo-light">
+    <div>
+     <div class="title">Typhoon Hazard Alert Network (THAN)</div>
+     <div style="font-size:12px;color:var(--muted)">Prototype · 3D UI Concept (no external APIs)</div>
+    </div>
+   </div>
+   <div class="toolbar">
+    <button class="btn ghost" id="langToggle" aria-label="Toggle language">EN | 中文</button>
+    <div class="search">
+     <input id="search" placeholder="Search shelters, roads, wards…" aria-label="Search" />
+     <span class="icon">🔎</span>
+     </div>
+    <button class="btn" id="theme" aria-label="Toggle theme">
+      <img src="Night1.gif" alt="Theme toggle dark" id="themeIconNight" class="theme-icon">
+      <img src="Morning1.gif" alt="Theme toggle light" id="themeIconMorning" class="theme-icon" style="display: none;">
+    </button>
+     <div class="sim-controls">
+     <span style="font-size:12px; color:var(--muted); margin-right: 8px;">SIMULATE:</span>
+     <button class="btn sim-btn green" onclick="setStateGreen()">GREEN</button>
+     <button class="btn sim-btn orange" onclick="setStateOrange()">ORANGE</button>
+     <button class="btn sim-btn red" onclick="setStateRed()">RED</button>
+     </div>
+    </div>
+   </header>
+
+   <section class="alert-strip" id="alertStrip" role="region" aria-live="polite" aria-label="Alert strip">
+    <span class="alert-badge" id="alertBadge">🟧 ORANGE · Severe</span>
+    <span id="alertMsg">High wind & heavy rain expected. Secure property and prepare to move.</span>
+    <span class="countdown" id="countdown">Impact in 18:24:00</span>
+   </section>
+
+   <main class="main" aria-label="Main dashboard">
+    <aside class="panel side-left" aria-label="Layer controls">
+     <h3 data-i18n="mapLayers">Map Layers</h3>
+     <div class="layers">
+      <label class="switch">
+       <span>🌀 <span data-i18n="layerPath">Typhoon Path</span></span>
+       <input type="checkbox" data-layer="track" checked>
+      </label>
+      <label class="switch">
+       <span>📡 <span data-i18n="layerCone">Predicted Cone</span></span>
+       <input type="checkbox" data-layer="cone" checked>
+      </label>
+      <label class="switch">
+       <span>💨 <span data-i18n="layerWind">Wind Vectors</span></span>
+       <input type="checkbox" data-layer="wind" checked>
+      </label>
+      <label class="switch">
+       <span>🌧️ <span data-i18n="layerRain">Rainfall Radar</span></span>
+       <input type="checkbox" data-layer="rain">
+      </label>
+      <label class="switch">
+       <span>🌊 <span data-i18n="layerWave">Water Level</span></span>
+       <input type="checkbox" data-layer="wave" checked>
+      </label>
+      <label class="switch">
+       <span>⚠️ <span data-i18n="layerFlood">Flood Risk Zones</span></span>
+       <input type="checkbox" data-layer="flood" checked>
+      </label>
+      <label class="switch">
+       <span>🏠 <span data-i18n="layerShelters">Shelters</span></span>
+       <input type="checkbox" data-layer="shelters" checked>
+      </label>
+      <label class="switch">
+       <span>🚧 <span data-i18n="layerRoads">Roads Closed</span></span>
+       <input type="checkbox" data-layer="roads">
+      </label>
+     </div>
+     <div class="timeline">
+      <h3 data-i18n="timeline">Forecast Timeline (hrs)</h3>
+      <input id="timeSlider" type="range" min="0" max="72" step="3" value="18" aria-label="Forecast timeline" />
+      <div class="chip" id="tlabel">+18 hours</div>
+     </div>
+    </aside>
+
+    <section class="panel center" aria-label="Interactive map">
+     <div class="map-wrap" id="map">
+      <div id="realMap"></div>
+      <div class="map-info-box-container" id="orangeInfoBox" style="display: none; top: 150px; left: 250px;">
+       <div class="map-info-box">
+        <div class="info-box-header">
+         <span class="info-box-title">Sensor: S-12</span>
+         <button class="info-box-close" onclick="$('#orangeInfoBox').style.display='none'">×</button>
+        </div>
+        <div class="info-box-main">155 km/h</div>
+        <div class="info-box-sub">▲ 115m (377ft)</div>
+       </div>
+       <div class="info-box-line"></div>
+       <div class="info-box-pin"></div>
+      </div> 
+     </section>
+
+    <section class="panel center" id="detailPanel" style="display: none;" aria-label="Detail view panel">
+     <div class="detail-header">
+      <h2 id="detailTitle">🌀 Typhoon Path - History</h2>
+      <button class="btn" id="detailCloseBtn">Back to Map 🗺️</button>
+     </div>
+     <div class="detail-body" id="detailGraphBody">
+      <svg viewBox="0 0 500 200" class="line-graph-svg" preserveAspectRatio="xMidYMid meet">
+       <line x1="40" y1="180" x2="480" y2="180" stroke="var(--muted)" stroke-width="1"></line>
+       <line x1="40" y1="20" x2="40" y2="180" stroke="var(--muted" stroke-width="1"></line>
+       <text x="20" y="25" fill="var(--muted)" font-size="10">High</text>
+       <text x="20" y="105" fill="var(--muted)" font-size="10">Mid</text>
+       <text x="20" y="185" fill="var(--muted)" font-size="10">Low</text>
+       <text x="40" y="195" fill="var(--muted)" font-size="10">-6h</text>
+       <text x="250" y="195" fill="var(--muted)" font-size="10">-3h</text>
+       <text x="460" y="195" fill="var(--muted)" font-size="10">Now</text>
+       <defs>
+        <linearGradient id="grad-graph" x1="0" y1="0" x2="0" y2="1">
+         <stop offset="0%" stop-color="var(--primary)" stop-opacity="0.4"/>
+         <stop offset="100%" stop-color="var(--primary)" stop-opacity="0"/>
+        </linearGradient>
+       </defs>
+       <path d="M 40 160 Q 100 100, 150 120 T 250 80 T 350 100 T 460 40" stroke="var(--primary)" stroke-width="2.5" fill="url(#grad-graph)" fill-opacity="0.7"/>
+       <circle cx="460" cy="40" r="4" fill="var(--primary)" stroke="#fff" stroke-width="2"/>
+      </svg>
+     </div>
+    </section>
+
+    <aside class="panel side-right" aria-label="Status panels">
+     <div class="cards">
+      <div class="card" id="statusCard">
+       <h3 data-i18n="status">Status</h3>
+       <div class="stat warn"><span data-i18n="statAlert">Alert Level</span><strong id="alertLevel">ORANGE · Severe</strong></div>
+       <div class="stat"><span data-i18n="statWind">Expected Wind</span><strong id="wind">165 km/h</strong></div>
+       <div class="stat warn"><span data-i18n="statRain">Expected Rain</span><strong id="rain">290 mm</strong></div>
+       <div class="stat"><span data-i18n="statEta">Impact ETA</span><strong id="eta">18 h</strong></div>
+      </div>
+     <div class="card">
+       <h3 data-i18n="sensors">Real-Time Sensors</h3>
+       <div class="stat warn"><span data-i18n="sensorRain">Rainfall</span><strong id="rf">122 mm/hr</strong></div>
+       <div class="stat"><span data-i18n="sensorWind">Wind Speed</span><strong id="ws">142 km/h</strong></div>
+       <div class="stat warn"><span data-i18n="sensorRiver">River Level</span><strong id="rl">+32 cm/hr</strong></div>
+       <div class="stat warn"><span data-i18n="sensorWave">Wave Height</span><strong id="wh">4.5 m</strong></div>
+       </div>
+      <div class="card">
+       <h3 data-i18n="insights">AI Insights</h3>
+       <ul class="ai-list" id="aiList">
+        <li>Evacuation recommended in low-lying areas.</li>
+        <li>3 roads at risk of closure in 12–24h.</li>
+        <li>12 shelters activated (capacity 3,400).</li>
+       </ul>
+      </div>
+     </div>
+    </aside>
+   </main>
+
+   <section class="actions-panel" aria-label="Quick actions">
+    <div class="actions">
+     <button class="btn danger" id="sos">🚨 SOS</button>
+     <button class="btn primary" id="broadcastBtn" onclick="openPhonePreview()">📲 Broadcast Alert</button>
+     <button class="btn help" id="shelter">🛟 Find shelter</button>
+     <button class="btn help" id="report">📸 Report</button>
+    </div>
+   </section>
+ </div>
+
+<script>
+  const $ = (sel, scope=document)=>scope.querySelector(sel);
+  const $$ = (sel, scope=document)=>Array.from(scope.querySelectorAll(sel));
+
+  // === 1. PUBNUB SETUP (Key များ ထည့်သွင်းခြင်း) ===
+  const pubnub = new PubNub({
+      publishKey: "pub-c-e1958803-b898-47a5-9daf-29e81e34debe",
+      subscribeKey: "sub-c-52dd665b-b9ec-4376-90d9-23078dabc1d0",
+      userId: "admin_user"
+  });
+
+  let isDetailViewActive = false;
+  const mapPanel = $('.panel.center');
+  const detailPanel = $('#detailPanel');
+  const detailTitle = $('#detailTitle');
+  const detailCloseBtn = $('#detailCloseBtn');
+  const leftSidebar = $('.side-left');
+  const allLayerSwitches = $$('.side-left .switch');
+
+  // Language Config
+  const i18n = {
+   en: {
+    mapLayers: "Map Layers", layerPath: "Typhoon Path", layerCone: "Predicted Cone", layerWind: "Wind Vectors", layerRain: "Rainfall Radar", layerFlood: "Flood Risk Zones", layerShelters: "Shelters", layerRoads: "Roads Closed", timeline: "Forecast Timeline (hrs)", status: "Status", statAlert: "Alert Level", statWind: "Expected Wind", statRain: "Expected Rain", statEta: "Impact ETA", sensors: "Real-Time Sensors", sensorRain: "Rainfall", sensorWind: "Wind Speed", sensorRiver: "River Level", insights: "AI Insights", sensorWave: "Wave Height", layerWave: "Water Level", search: "Search shelters, roads, wards…", 
+    sos: "SOS", safe: "I am safe", find: "Find shelter", report: "Report", 
+    broadcast: "Broadcast Alert", 
+    alertGreen: "No active threats. Systems are nominal.", levelGreen: "GREEN · All Clear", aiGreen: "<li>All systems nominal.</li><li>No hazards detected.</li>",
+    alertOrange: "High wind & heavy rain expected. Secure property and prepare to move.", levelOrange: "ORANGE · Severe", aiOrange: "<li>Evacuation recommended in low-lying areas.</li><li>3 roads at risk of closure in 12–24h.</li><li>12 shelters activated (capacity 3,400).</li>",
+    alertRed: "Storm surge imminent! Seek high ground immediately!", levelRed: "RED · EVACUATE", aiRed: "<li>CRITICAL: Roads 1, 4, 5 confirmed flooded.</li><li>All shelters at capacity.</li><li>This is not a drill.</li>", safeMarked: "Marked Safe"
+   },
+   zh: {
+     mapLayers: "地图图层", layerPath: "台风路径", layerCone: "预测路径", layerWind: "风向", layerRain: "降雨雷达", layerFlood: "洪水风险区", layerShelters: "避难所", layerRoads: "道路封闭", timeline: "预报时间线 (小时)", status: "状态", statAlert: "预警级别", statWind: "预计风速", statRain: "预计雨量", statEta: "预计到达时间", sensors: "实时监测", sensorRain: "降雨量", sensorWind: "风速", sensorRiver: "河流水位", insights: "AI 洞察", sensorWave: "海浪高度", layerWave: "海岸波浪", search: "搜索避难所、道路、街区…", 
+     sos: "紧急求助", safe: "我很安全", find: "查找避难所" , report: "上报", 
+     broadcast: "广播预警", 
+     alertGreen: "没有即时威胁。系统运行正常。", levelGreen: "绿色 · 一切正常", aiGreen: "<li>所有系统运行正常。</li><li>未检测到灾害。</li>",
+     alertOrange: "预计将有强风和暴雨。请保护好财产并做好转移准备。", levelOrange: "橙色预警 · 严重", aiOrange: "<li>建议低洼地区疏散。</li><li>3条道路预计在12-24小时内关闭。</li><li>12个避难所已启动 (容量 3,400).</li>",
+     alertRed: "风暴潮即将来临！请立即撤离到高地！", levelRed: "红色预警 · 撤离", aiRed: "<li>紧急：1、4、5号道路确认被淹。</li><li>所有避难所已满员。</li><li>这不是演习。</li>", safeMarked: "已标记安全"
+    }
+   };
+ 
+   const langs = ['en','zh'];
+   const langLabel = { en:'EN', zh:'中文' };
+   let langIndex = 0;
+   let lang = langs[langIndex];
+
+   const setLangButton = ()=>{
+       const order = langs.map((k,i)=> i===langIndex ? `[${langLabel[k]}]` : langLabel[k]).join(' | ');
+       $('#langToggle').textContent = order;
+   };
+
+   const applyLang = () => {
+       const t = i18n[lang];
+       $$('[data-i18n]').forEach(el => { const key = el.dataset.i18n; if (t[key]) { el.textContent = t[key]; } });
+       const searchInput = $('#search');
+       if (searchInput) { searchInput.placeholder = t.search; }
+       
+       $('#sos').textContent = (lang==='en'?"🚨 ":"🚨 ") + t.sos;
+       $('#shelter').textContent = (lang==='en'?"🛟 ":"🛟 ") + t.find;
+       $('#report').textContent = (lang==='en'?"📸 ":"📸 ") + t.report;
+       $('#broadcastBtn').textContent = (lang==='en'?"📲 ":"📲 ") + t.broadcast;
+
+       const alertStripClass = $('#alertStrip').className;
+       if (alertStripClass.includes('success')) { setStateGreen(true); } else if (alertStripClass.includes('danger')) { setStateRed(true); } else { setStateOrange(true); }
+       setLangButton();
+  };
+ 
+   $('#langToggle').addEventListener('click',()=>{ langIndex = (langIndex + 1) % langs.length; lang = langs[langIndex]; applyLang(); });
+ 
+   function showDetailView(layerName, icon) {
+    isDetailViewActive = true;
+    mapPanel.style.display = 'none';
+    detailPanel.style.display = 'flex'; 
+    leftSidebar.classList.add('detail-view-active');
+    detailTitle.innerHTML = `${icon} ${layerName} - History`;
+   }
+
+   function hideDetailView() {
+    isDetailViewActive = false;
+    detailPanel.style.display = 'none';
+    mapPanel.style.display = 'grid';
+    leftSidebar.classList.remove('detail-view-active');
+    allLayerSwitches.forEach(sw => sw.classList.remove('active-layer'));
+   }
+   detailCloseBtn.addEventListener('click', hideDetailView);
+
+   // === MAP SETUP ===
+   const MAPI_KEY = "SfMCLoSowE05NoisavQV"; 
+   const map = L.map('realMap').setView([25.93, 108.52], 17);
+   const styleUrl = `https://api.maptiler.com/maps/outdoor-v2/{z}/{x}/{y}.png?key=${MAPI_KEY}`;
+   L.tileLayer(styleUrl, { attribution: `&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors` }).addTo(map);
+
+   // === LAYERS ===
+   const typhoonTrackCoords = [[25.80, 108.30], [25.85, 108.40], [25.93, 108.52], [26.00, 108.65], [26.10, 108.80]];
+   const typhoonTrackCasing = L.polyline(typhoonTrackCoords, { color: 'white', weight: 6, opacity: 0.7 });
+   const typhoonTrackLine = L.polyline(typhoonTrackCoords, { color: '#E63946', weight: 3, opacity: 1.0, dashArray: '8, 10' });
+   const typhoonTrackPoints = typhoonTrackCoords.map(coord => { return L.circleMarker(coord, { radius: 6, color: 'white', weight: 3, fillColor: '#E63946', fillOpacity: 1.0 }); });
+   const typhoonPathLayerGroup = L.layerGroup([ typhoonTrackCasing, typhoonTrackLine, ...typhoonTrackPoints ]);
+
+   const predictedConeCoords = [ [25.75, 108.20], [26.15, 108.70], [26.15, 108.90], [25.75, 108.40] ];
+   const predictedConeFill = L.polygon(predictedConeCoords, { fillColor: '#19b8ff', fillOpacity: 0.2, stroke: false });
+   const predictedConeBorderCoords = [ ...predictedConeCoords, predictedConeCoords[0] ];
+   const predictedConeBorder = L.polyline(predictedConeBorderCoords, { color: '#19b8ff', weight: 2, opacity: 0.8, dashArray: '10, 10' });
+   const predictedConeLayerGroup = L.layerGroup([ predictedConeFill, predictedConeBorder ]);
+   
+   const windIconHtml = `<svg viewBox="0 0 80 40" style="overflow:visible;"><defs><filter id="wind-shadow-filter" x="-50%" y="-50%" width="200%" height="200%"><feFlood flood-color="#000000" flood-opacity="0.5" result="shadowColor"/><feComposite in="shadowColor" in2="SourceAlpha" operator="in" result="shadow"/><feGaussianBlur in="shadow" stdDeviation="2" result="blurredShadow"/><feOffset in="blurredShadow" dx="1" dy="2" result="offsetShadow"/><feMerge><feMergeNode in="offsetShadow"/><feMergeNode in="SourceGraphic"/></feMerge></filter><linearGradient id="wind-gradient" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#FFD700; stop-opacity:0.1" /><stop offset="100%" style="stop-color:#FFD700; stop-opacity:1" /></linearGradient><marker id="arrowhead-pro" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse" fill="#FFD700"><path d="M 0 0 L 10 5 L 0 10 z"></path></marker></defs><path d="M 0,15 Q 40,0 80,15" fill="none" stroke="url(#wind-gradient)" stroke-width="2" stroke-linecap="round" stroke-dasharray="25 35" marker-end="url(#arrowhead-pro)" filter="url(#wind-shadow-filter)"><animate attributeName="stroke-dashoffset" from="60" to="0" dur="2s" repeatCount="indefinite" /><animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.9; 1" dur="2s" repeatCount="indefinite" /></path><path d="M 0,30 Q 40,15 80,30" fill="none" stroke="url(#wind-gradient)" stroke-width="2" stroke-linecap="round" stroke-dasharray="25 35" marker-end="url(#arrowhead-pro)" filter="url(#wind-shadow-filter)"><animate attributeName="stroke-dashoffset" from="60" to="0" dur="2s" begin="-1s" repeatCount="indefinite" /><animate attributeName="opacity" values="0; 1; 1; 0" keyTimes="0; 0.2; 0.9; 1" dur="2s" begin="-1s" repeatCount="indefinite" /></path></svg>`;
+   const windIcon = L.divIcon({ className: 'wind-vector-icon', html: windIconHtml, iconSize: [80, 40] });
+   const windCoords = [[25.82, 108.35], [25.90, 108.45], [25.98, 108.58], [26.05, 108.72]];
+   const windMarkers = windCoords.map(coord => { return L.marker(coord, { icon: windIcon, interactive: false }); });
+   const windVectorLayerGroup = L.layerGroup(windMarkers);
+
+    const waveSensorCoords = [25.860, 108.540];
+    const waveSensorPopupContent = `<div class="map-info-box" style="border: none; box-shadow: none; background: transparent;"><div class="info-box-header"><span class="info-box-title">River Sensor: R-01</span></div><div class="info-box-main">4.5</div><div class="info-box-main">m</div><div class="info-box-sub" style="color:var(--danger);"><span>▲</span> +32 cm/hr</div></div>`;
+    const waveLogoIcon = L.icon({ iconUrl: 'water.jfif', iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -16], className: 'wave-logo-icon' });
+    const waveSensorMarker = L.marker(waveSensorCoords, { icon: waveLogoIcon });
+    waveSensorMarker.bindPopup(waveSensorPopupContent, { className: 'leaflet-glass-popup leaflet-wave-popup' });
+    const waveSensorLayerGroup = L.layerGroup([waveSensorMarker]);
+    
+     const floodZoneImageUrl = 'zone.png'; 
+    const floodZoneBounds = [[25.60, 108.00], [26.25, 109.10]];
+     const floodZoneLayer = L.imageOverlay(floodZoneImageUrl, floodZoneBounds, { opacity: 0.5, interactive: false });
+     const floodRiskLayerGroup = L.layerGroup([floodZoneLayer]);
+    
+      const shelterIcon = L.icon({ iconUrl: 'home4.png', iconSize: [38, 38], iconAnchor: [19, 38], popupAnchor: [0, -38] });
+      const shelterData = [ { id: 'shelter_A', coords: [25.935, 108.530], name: 'Rongjiang Middle School Shelter', capacity: 1500, status: 'Open' }, { id: 'shelter_B', coords: [25.925, 108.565], name: 'City Hall Basement', capacity: 800, status: 'Open' }, { id: 'shelter_C', coords: [25.905, 108.560], name: 'Tingdong Primary School', capacity: 650, status: 'At Capacity' } ];
+      const shelterMarkers = shelterData.map(shelter => {
+          const popupContent = `<div class="map-info-box" style="border: none; box-shadow: none; background: transparent;"><div class="info-box-header"><span class="info-box-title" style="color: var(--text-color);">Shelter: ${shelter.name}</span></div><div class="info-box-main" style="color: var(--primary); font-size: 1.5rem; font-weight: 700;">Status: ${shelter.status}</div><div class="info-box-sub" style="color: var(--text-color-light); margin-top: 8px;">Capacity: ${shelter.capacity}</div></div>`;
+          return L.marker(shelter.coords, {icon: shelterIcon}).bindPopup(popupContent, { className: 'leaflet-glass-popup' });
+      });
+      const shelterLayerGroup = L.layerGroup(shelterMarkers);
+
+      const rainfallRadarImageUrl = 'radar2.gif'; 
+      const rainfallRadarBounds = [ [25.60, 108.05], [26.30, 109.05] ];
+      const rainfallRadarLayer = L.imageOverlay(rainfallRadarImageUrl, rainfallRadarBounds, { opacity: 0.6, interactive: false });
+      const rainLayerGroup = L.layerGroup([rainfallRadarLayer]);
+
+      const closedRoadPathCoords_1 = [ [25.915, 108.440], [25.922, 108.470], [25.930, 108.500], [25.940, 108.525], [25.955, 108.560] ];
+      const closedRoadPoints_1 = [ { coords: [25.915, 108.440], label: 'Jihua Intersection' }, { coords: [25.922, 108.470], label: 'Bakai Bridge Access' }, { coords: [25.930, 108.500], label: 'Pingjiang Exit' }, { coords: [25.940, 108.525], label: 'Near Wangdong' }, { coords: [25.955, 108.560], label: 'Zhongcheng Access' } ];
+      const closedRoadPathCoords_2 = [ [25.910, 108.570], [25.912, 108.600] ];
+      const closedRoadPoints_2 = [ { coords: [25.910, 108.570], label: 'Tingdong Exit' }, { coords: [25.912, 108.600], label: 'Xiarong Expressway Closed' } ];
+      const roadClosedPathStyle = { color: '#E63946', weight: 4, opacity: 0.8 };
+      const roadPointStyle = { radius: 6, color: '#FFFFFF', weight: 2, fillColor: '#19b8ff', fillOpacity: 1.0 };
+      const roadLayers = [];
+      roadLayers.push( L.polyline(closedRoadPathCoords_1, roadClosedPathStyle) );
+      closedRoadPoints_1.forEach(point => { const marker = L.circleMarker(point.coords, roadPointStyle); marker.bindTooltip(point.label, { permanent: true, direction: 'top', className: 'road-event-label', offset: [0, -10] }); roadLayers.push(marker); });
+      roadLayers.push( L.polyline(closedRoadPathCoords_2, roadClosedPathStyle) );
+      closedRoadPoints_2.forEach(point => { const marker = L.circleMarker(point.coords, roadPointStyle); marker.bindTooltip(point.label, { permanent: true, direction: 'top', className: 'road-event-label', offset: [0, -10] }); roadLayers.push(marker); });
+      const roadsLayerGroup = L.layerGroup(roadLayers);
+
+   const leafletLayers = { 'track': typhoonPathLayerGroup, 'cone': predictedConeLayerGroup, 'wind': windVectorLayerGroup, 'wave': waveSensorLayerGroup, 'flood': floodRiskLayerGroup, 'shelters': shelterLayerGroup, 'rain': rainLayerGroup, 'roads': roadsLayerGroup };
+
+   const searchInput = $('#search');
+   async function geocodeAndMove(query) {
+     const geocodeUrl = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${MAPI_KEY}`;
+   try {
+      const response = await fetch(geocodeUrl);
+    const data = await response.json();
+    if (data.features && data.features.length > 0) {
+     const feature = data.features[0];
+     if (feature.bbox) {
+      const bbox = feature.bbox;
+      const bounds = [ [bbox[1], bbox[0]], [bbox[3], bbox[2]] ];
+      map.fitBounds(bounds);
+       } else {
+        const center = feature.center; 
+      const latLng = [center[1], center[0]]; 
+       map.setView(latLng, 14); 
+     }
+      } else { alert(`Location not found: "${query}"`); }
+   } catch (error) { console.error('Geocoding error:', error); alert('An error occurred during the search.'); }
+   }
+   searchInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); const query = searchInput.value; if (query.trim() !== '') { geocodeAndMove(query.trim()); } } });
+
+   let seconds=18*3600+24*60;
+  const fmt=t=>String(t).padStart(2,'0');
+   setInterval(()=>{
+   if(seconds>0){seconds--;}
+   if(seconds === 0 && !$('#alertStrip').classList.contains('success')) { return; } else if (seconds === 0 && $('#alertStrip').classList.contains('success')) { $('#countdown').textContent = 'Status: N/A'; return; }
+    const h=Math.floor(seconds/3600), m=Math.floor((seconds%3600)/60), s=seconds%60;
+   $('#countdown').textContent=`Impact in ${fmt(h)}:${fmt(m)}:${fmt(s)}`;
+   $('#eta').textContent=`${h} h`;
+   },1000);
+
+   const slider=$('#timeSlider');
+  slider.addEventListener('input',()=>{ $('#tlabel').textContent=`+${slider.value} hours`; const op = Math.max(0.15,Math.min(0.65, (slider.value/72))); });
+ 
+   $$('.switch').forEach(switchEl => {
+    const inp = switchEl.querySelector('input[type="checkbox"]');
+   const setInitialLayerState = () => { const isChecked = inp.checked; const layerName = inp.dataset.layer; const leafletLayer = leafletLayers[layerName]; if (leafletLayer) { if (isChecked) { map.addLayer(leafletLayer); } else { map.removeLayer(leafletLayer); } } };
+   setInitialLayerState(); 
+   const combinedLogicHandler = (e) => {
+    const isGreenState = $('#alertStrip').classList.contains('success');
+      if (isGreenState) { e.preventDefault(); if (isDetailViewActive) { if (switchEl.classList.contains('active-layer')) { hideDetailView(); inp.checked = false; } } else { const layerName = switchEl.querySelector('span span').textContent; const icon = switchEl.querySelector('span').textContent.split(' ')[0]; switchEl.classList.add('active-layer'); showDetailView(layerName, icon); inp.checked = true; } return; }
+     if (e.target.tagName !== 'INPUT') { inp.checked = !inp.checked; }
+      const isChecked = inp.checked; const layerName = inp.dataset.layer; const leafletLayer = leafletLayers[layerName]; if (leafletLayer) { if (isChecked) { map.addLayer(leafletLayer); } else { map.removeLayer(leafletLayer); } }
+    };
+    switchEl.addEventListener('click', combinedLogicHandler);
+  });
+
+ const themeBtn = $('#theme');
+  const themeIconNight = $('#themeIconNight'); 
+  const themeIconMorning = $('#themeIconMorning'); 
+ themeBtn.addEventListener('click', () => {
+  document.body.classList.toggle('light-theme');
+  const isLight = document.body.classList.contains('light-theme');
+    if (isLight) { themeIconMorning.style.display = 'block'; themeIconNight.style.display = 'none'; } else { themeIconMorning.style.display = 'none'; themeIconNight.style.display = 'block'; }
+ });
+
+   $('#sos').addEventListener('click',()=>{ alert('SOS sent to emergency center with your approximate location.'); });
+   $('#shelter').addEventListener('click',()=>{ setLayerState('shelters', true); const nearestShelterCoords = shelterData[0].coords; const nearestShelterMarker = shelterMarkers[0]; map.flyTo(nearestShelterCoords, 17, { duration: 1.5 }); setTimeout(() => { nearestShelterMarker.openPopup(); }, 1600); });
+  $('#report').addEventListener('click',()=>{ alert('Open camera / upload in production. For prototype, this shows a placeholder.'); });
+
+  setInterval(()=>{
+    const rand=(b)=> (b + (Math.random()-.5)*4).toFixed(0);
+   $('#ws').textContent = `${rand(142)} km/h`; $('#rf').textContent = `${rand(122)} mm/hr`; $('#rl').textContent = `${(30+Math.random()*6).toFixed(0)} cm/hr`; $('#wh').textContent = `${(4.5 + (Math.random() - 0.5) * 1.5).toFixed(1)} m`;
+   }, 2500);
+ 
+  const layerCheckboxes = { track: document.querySelector('input[data-layer="track"]'), cone: document.querySelector('input[data-layer="cone"]'), wind: document.querySelector('input[data-layer="wind"]'), rain: document.querySelector('input[data-layer="rain"]'), wave: document.querySelector('input[data-layer="wave"]'), flood: document.querySelector('input[data-layer="flood"]'), shelters: document.querySelector('input[data-layer="shelters"]'), roads: document.querySelector('input[data-layer="roads"]') };
+   function setLayerState(layerName, isChecked) {
+   const checkbox = layerCheckboxes[layerName];
+   if (checkbox && checkbox.checked !== isChecked) { checkbox.checked = isChecked; }
+   const leafletLayer = leafletLayers[layerName]; if (leafletLayer) { if (isChecked) { if (!map.hasLayer(leafletLayer)) { map.addLayer(leafletLayer); } } else { if (map.hasLayer(leafletLayer)) { map.removeLayer(leafletLayer); } } }
+  }
+
+  function setStateGreen(isTranslating = false) {
+   if (isDetailViewActive) hideDetailView();
+    const t = i18n[lang];
+   $('#orangeInfoBox').style.display = 'none'; 
+   $('#alertStrip').className = 'alert-strip success'; $('#alertBadge').textContent = '🟩 ' + t.levelGreen; $('#alertMsg').textContent = t.alertGreen; $('#countdown').textContent = 'Status: N/A'; seconds = 0; 
+   $('#alertLevel').textContent = t.levelGreen; $('#wind').textContent = '10 km/h'; $('#rain').textContent = '0 mm'; $('#eta').textContent = 'N/A';
+    $('#rf').textContent = '0 mm/hr'; $('#ws').textContent = '8 km/h'; $('#rl').textContent = '-5 cm/hr'; $('#wh').textContent = '0.5 m';
+   $('#aiList').innerHTML = t.aiGreen;
+   setLayerState('track', false); setLayerState('cone', false); setLayerState('wind', false); setLayerState('rain', false); setLayerState('wave', false); setLayerState('flood', false); setLayerState('shelters', false); setLayerState('roads', false);
+   try { map.setView([25.93, 108.52], 9); } catch (e) { console.error("Could not set green view:", e); }
+   if (!isTranslating) { applyLang(); }
+   }
+
+   function setStateOrange(isTranslating = false) {
+    if (isDetailViewActive) hideDetailView();
+   const t = i18n[lang];
+   $('#orangeInfoBox').style.display = 'none'; 
+   $('#alertStrip').className = 'alert-strip'; $('#alertBadge').textContent = '🟧 ' + t.levelOrange; $('#alertMsg').textContent = t.alertOrange; seconds = 18*3600+24*60; 
+    $('#alertLevel').textContent = t.levelOrange; $('#wind').textContent = '165 km/h'; $('#rain').textContent = '290 mm';
+   $('#rf').textContent = '122 mm/hr'; $('#ws').textContent = '142 km/h'; $('#rl').textContent = '+32 cm/hr'; $('#wh').textContent = '4.5 m';
+   $('#aiList').innerHTML = t.aiOrange;
+   setLayerState('track', true); setLayerState('cone', true); setLayerState('wind', true); setLayerState('rain', false); setLayerState('wave', true); setLayerState('flood', true); setLayerState('shelters', true); setLayerState('roads', false);
+    try { const pathBounds = leafletLayers['track'].getBounds(); const coneBounds = leafletLayers['cone'].getBounds(); const combinedBounds = pathBounds.extend(coneBounds); map.fitBounds(combinedBounds, { padding: [150, 150] }); waveSensorMarker.openPopup(); } catch (e) { console.error("Could not fit bounds:", e); }
+    if (!isTranslating) { applyLang(); }
+   }
+
+   function setStateRed(isTranslating = false) {
+    if (isDetailViewActive) hideDetailView();
+   const t = i18n[lang];
+    $('#orangeInfoBox').style.display = 'none'; 
+    $('#alertStrip').className = 'alert-strip danger'; $('#alertBadge').textContent = '🟥 ' + t.levelRed; $('#alertMsg').textContent = t.alertRed; seconds = 30 * 60; 
+   $('#alertLevel').textContent = t.levelRed; $('#wind').textContent = '220 km/h'; $('#rain').textContent = '> 400 mm';
+    $('#rf').textContent = '350 mm/hr'; $('#ws').textContent = '215 km/h'; $('#rl').textContent = '+150 cm/hr'; $('#wh').textContent = '> 8.0 m';
+    $('#aiList').innerHTML = t.aiRed;
+    setLayerState('track', true); setLayerState('cone', true); setLayerState('wind', true); setLayerState('rain', true); setLayerState('wave', true); setLayerState('flood', true); setLayerState('shelters', true); setLayerState('roads', true);
+   if (!isTranslating) { applyLang(); }
+   }
+
+  // ==========================================================
+  // === ⭐️ PUBNUB BROADCASTING LOGIC (UPDATED) ⭐️ ===
+  // ==========================================================
+
+  function openPhonePreview() {
+      const alertStrip = document.getElementById('alertStrip');
+      let state = 'green'; 
+      if (alertStrip.classList.contains('danger')) { state = 'red'; } 
+      else if (!alertStrip.classList.contains('success')) { state = 'orange'; }
+
+      // 1. Check if window already exists (Optional)
+      // If you are using two different devices, this window.open is not needed for the other device.
+      // But for testing on same PC:
+      // mobileWindow = window.open('mobile_alert.html', 'THAN_App', 'width=400,height=800,scrollbars=yes');
+
+      // 2. ⭐️ Trigger PubNub Broadcast ⭐️
+      // This sends the signal to ALL connected phones
+      pubnub.publish({
+          channel: "than_alert_system",
+          message: {
+              state: state,
+              lang: lang
+          }
+      }, function(status, response) {
+          if (status.error) {
+              console.log("Broadcast Error:", status);
+              alert("Error sending broadcast!");
+          } else {
+              console.log("Broadcast Sent:", state);
+              alert(`Broadcast Sent: ${state.toUpperCase()}`);
+          }
+      });
+  }
+
+  setStateGreen();
+ </script>
+</body>
+</html>

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeChat - Standby</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.0.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        body {
+            background-color: #f0f0f0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex; justify-content: center; min-height: 100vh; margin: 0; padding: 40px 0; overflow-y: auto;
+        }
+        .phone-frame {
+            width: 375px; height: 750px;
+            background: #000;
+            border-radius: 40px; border: 12px solid #1a1a1a;
+            position: relative; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.2); flex-shrink: 0;
+        }
+        .notch {
+            position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+            width: 150px; height: 30px; background: #1a1a1a;
+            border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; z-index: 2000;
+        }
+        
+        /* === SCREENS === */
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            transition: transform 0.4s ease-in-out, opacity 0.4s ease;
+            display: flex; flex-direction: column;
+            background: #000;
+        }
+        .screen.hidden { opacity: 0; pointer-events: none; z-index: 0; transform: scale(0.95); }
+        .screen.active { opacity: 1; pointer-events: auto; z-index: 10; transform: scale(1); }
+
+        /* === 1. SPLASH SCREEN === */
+        #screen-splash {
+            background: linear-gradient(180deg, #07C160 0%, #05a852 100%);
+            align-items: center; justify-content: space-between; padding-top: 150px; padding-bottom: 40px; box-sizing: border-box;
+        }
+        .splash-logo { width: 110px; height: 110px; border-radius: 22px; margin-bottom: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.15); animation: breathe 3s infinite; }
+        @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+        .splash-text { font-size: 22px; color: #fff; font-weight: 500; }
+        .splash-sub { font-size: 13px; color: rgba(255,255,255,0.8); }
+        .splash-footer { font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; }
+        #screen-splash .status-bar { color: white; }
+
+        .status-bar { padding: 14px 24px 10px; display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; width: 100%; box-sizing: border-box; position: absolute; top:0; z-index: 101; }
+
+        /* === NOTIFICATION BANNER === */
+        .notification-banner {
+            position: absolute; top: 60px; left: 10px; right: 10px;
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
+            padding: 15px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: flex; align-items: center; gap: 15px;
+            transform: translateY(-150px); transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            z-index: 2001; cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .notification-banner.show { transform: translateY(0); }
+        .notification-banner.blink-fast { animation: flash-fast 0.6s infinite ease-in-out; }
+        .notification-banner.blink-slow { animation: flash-slow 2s infinite ease-in-out; }
+        @keyframes flash-slow { 50% { background-color: #fff3e0; border-color: #ffb020; } }
+        @keyframes flash-fast { 50% { background-color: #ffe6e6; transform: scale(1.02); border-color: #ff4d4f; } }
+
+        .notif-icon { font-size: 28px; }
+        .notif-content { flex-grow: 1; }
+        .notif-header { font-weight: 800; font-size: 15px; color: #333; margin-bottom: 2px; }
+        .notif-body { font-size: 13px; color: #555; line-height: 1.3; }
+
+        /* === 2. CHAT SCREEN === */
+        #screen-chat { background: #ededed; }
+        #screen-chat .status-bar { color: black; }
+        .chat-header { padding: 15px 20px; background: #ededed; border-bottom: 1px solid #dcdcdc; display: flex; align-items: center; gap: 10px; font-weight: 500; padding-top: 50px; }
+        .chat-area { padding: 20px; flex-grow: 1; overflow-y: auto; }
+        .message-bubble { background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-top: 10px; }
+        .alert-image { width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid #eee; object-fit: cover; }
+        .alert-title { font-weight: bold; font-size: 16px; margin-bottom: 8px; color: #333; line-height: 1.4; }
+        .alert-body { font-size: 15px; color: #555; line-height: 1.5; margin-bottom: 15px; }
+        .action-link { display: block; padding: 12px; background: #f5f5f5; color: #0052cc; text-decoration: none; border-radius: 6px; text-align: center; font-weight: 500; border: 1px solid #e0e0e0; cursor: pointer; }
+        .red-state .alert-title { color: #ff3b30; } .orange-state .alert-title { color: #ff8a00; } .green-state .alert-title { color: #3cc37a; }
+
+        /* === 3. NAVIGATION SCREEN === */
+        #screen-nav { background: #0d1b2a; }
+        #screen-nav .status-bar { color: white; }
+
+        .nav-top { position: absolute; top: 50px; left: 10px; right: 10px; background: rgba(19, 35, 55, 0.95); padding: 15px; border-radius: 12px; z-index: 1000; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: flex; justify-content: space-between; align-items: center; border-left: 5px solid transparent; }
+        .nav-top.red-mode { border-left-color: #ff4d4f; } .nav-top.orange-mode { border-left-color: #ffb020; } .nav-top.green-mode { border-left-color: #3cc37a; }
+        
+        #mobileMap { width: 100%; flex-grow: 1; z-index: 1; }
+
+        .nav-bottom { position: absolute; bottom: 20px; left: 0; right: 0; background: rgba(19, 35, 55, 0.95); padding: 20px; z-index: 1000; color: white; display: flex; justify-content: space-between; align-items: center; }
+        .btn-exit { background: #ff4d4f; border: none; color: white; padding: 8px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
+        
+        /* Marker Animations */
+        .safe-pulse { width: 20px; height: 20px; background: #3cc37a; border-radius: 50%; box-shadow: 0 0 0 rgba(60, 195, 122, 0.4); animation: pulse-green 2s infinite; }
+        @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(60, 195, 122, 0.7); } 70% { box-shadow: 0 0 0 20px rgba(60, 195, 122, 0); } 100% { box-shadow: 0 0 0 0 rgba(60, 195, 122, 0); } }
+
+        .warning-pulse { width: 20px; height: 20px; background: #ffb020; border-radius: 50%; box-shadow: 0 0 0 rgba(255, 176, 32, 0.4); animation: pulse-orange 2s infinite; }
+        @keyframes pulse-orange { 0% { box-shadow: 0 0 0 0 rgba(255, 176, 32, 0.7); } 70% { box-shadow: 0 0 0 20px rgba(255, 176, 32, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 176, 32, 0); } }
+
+        .danger-pulse { width: 20px; height: 20px; background: #ff3b30; border-radius: 50%; box-shadow: 0 0 0 rgba(255, 59, 48, 0.4); animation: pulse-red 1.5s infinite; }
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); } 70% { box-shadow: 0 0 0 25px rgba(255, 59, 48, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); } }
+
+        .bouncing-pin { width: 50px; height: 80px; background: transparent; border: none; animation: bounce 1.5s infinite ease-in-out; filter: drop-shadow(0 5px 5px rgba(0,0,0,0.5)); }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+
+        .leaflet-div-icon { background: transparent; border: none; }
+        .nav-arrow { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 25px solid #00A8FF; filter: drop-shadow(0 0 5px #00A8FF); }
+
+        /* ⭐️ Custom Popup Style (Matches Image) ⭐️ */
+        .custom-popup .leaflet-popup-content-wrapper {
+            background: rgba(75, 85, 95, 0.95); /* Dark Gray Background */
+            color: white;
+            border-radius: 12px;
+            padding: 0;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .custom-popup .leaflet-popup-tip {
+            background: rgba(75, 85, 95, 0.95);
+        }
+        .custom-popup .leaflet-popup-content {
+            margin: 15px;
+            width: 200px !important;
+        }
+        .pop-header {
+            font-size: 12px;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .pop-status {
+            font-size: 20px;
+            font-weight: 800;
+            color: #448aff; 
+            margin-bottom: 8px;
+            line-height: 1.2;
+        }
+        .pop-cap {
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+        }
+        .leaflet-container a.leaflet-popup-close-button {
+            color: #aaa;
+        }
+        
+    </style>
+</head>
+<body>
+
+    <div class="phone-frame">
+        <div class="notch"></div>
+
+        <div id="screen-splash" class="screen active">
+            <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+            <div class="splash-content">
+                <img src="Wechat.png" alt="WeChat" class="splash-logo">
+                <div class="splash-text">WeChat</div>
+                <div class="splash-sub">System Online</div>
+            </div>
+            <div class="splash-footer">Powered by THAN Network</div>
+            <div id="notifBanner" class="notification-banner" onclick="goToChat()">
+                <div class="notif-icon" id="bannerIcon">⚠️</div>
+                <div class="notif-content">
+                    <div class="notif-header">
+                        <span id="bannerTitleEn">ALERT</span>
+                        <span style="font-size:10px; opacity:0.8;">Now</span>
+                    </div>
+                    <div class="notif-body" id="bannerBody">Details...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="screen-chat" class="screen hidden">
+            <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+            <div class="chat-header">
+                <span style="font-size:20px; cursor:pointer;" onclick="goBackToSplash()">‹</span>
+                <span>THAN Alert System</span>
+                <span style="margin-left:auto;">•••</span>
+            </div>
+            <div class="chat-area">
+                <div style="text-align:center; color:#999; font-size:12px; margin-bottom:10px;">Today 12:48 PM</div>
+                <div class="message-bubble" id="msgContainer">
+                    <div class="alert-title" id="msgTitle">Loading...</div>
+                    <img src="zone.png" class="alert-image" id="msgImg"> 
+                    <div class="alert-body" id="msgBody">...</div>
+                    <div class="action-link" id="msgLink" onclick="goToNav()">🔗 View Navigation Map</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="screen-nav" class="screen hidden">
+            <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+            <div class="nav-top" id="navTop">
+                <div style="display:flex; align-items:center;">
+                    <span class="turn-icon" id="navIcon">➤</span>
+                    <div>
+                        <div class="nav-instruction" id="navTitle">...</div>
+                        <div class="nav-sub" id="navSubtitle">...</div>
+                    </div>
+                </div>
+            </div>
+            <div id="mobileMap"></div>
+            <div class="nav-bottom">
+                <div>
+                    <div style="font-size:18px; font-weight:bold;" id="bottomMain">--</div>
+                    <div style="font-size:12px; color:#aaa;" id="bottomSub">--</div>
+                </div>
+                <button class="btn-exit" onclick="goBackToSplash()">Exit</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+    // === 1. PUBNUB SETUP (Key များ ထည့်သွင်းခြင်း) ===
+    const pubnub = new PubNub({
+        publishKey: "pub-c-e1958803-b898-47a5-9daf-29e81e34debe",
+        subscribeKey: "sub-c-52dd665b-b9ec-4376-90d9-23078dabc1d0",
+        userId: "student_" + Math.floor(Math.random() * 1000)
+    });
+
+    let currentState = 'green';
+    let currentLang = 'en';
+    let map, userMarker;
+    let shelterMarkers = [];
+    let routePolylines = [];
+
+    // === 2. LISTEN FOR ALERTS (အချက်ပေးချက်များကို နားထောင်ခြင်း) ===
+    pubnub.subscribe({ channels: ["than_alert_system"] });
+
+    pubnub.addListener({
+        message: function(event) {
+            console.log("Message Received:", event.message);
+            
+            // Update State and Language
+            currentState = event.message.state;
+            currentLang = event.message.lang || 'en';
+            
+            // Show Notification Banner
+            if (!document.getElementById('screen-splash').classList.contains('hidden')) {
+                const banner = document.getElementById('notifBanner');
+                const bIcon = document.getElementById('bannerIcon');
+                const bTitle = document.getElementById('bannerTitleEn');
+                const bBody = document.getElementById('bannerBody');
+
+                const content = bilingualData[currentState] || bilingualData['green'];
+                bIcon.textContent = content.icon;
+                bTitle.textContent = content.title;
+                bBody.innerHTML = content.body;
+
+                banner.className = 'notification-banner'; 
+                if (currentState === 'red') banner.classList.add('blink-fast');
+                else if (currentState === 'orange') banner.classList.add('blink-slow');
+                banner.classList.add('show');
+            }
+
+            // Update Map if it is open
+            if(map) { updateMapContent(); }
+            
+            // Update Chat if it is open
+            if(!document.getElementById('screen-chat').classList.contains('hidden')) {
+                updateChatContent();
+            }
+        }
+    });
+
+    const bilingualData = {
+        red: { icon: "🔴", title: "URGENT ALERT / 紧急预警", body: "Storm Surge Imminent! Tap to View.<br>风暴潮即将来临！点击查看详情。" },
+        orange: { icon: "🟠", title: "WARNING / 警告", body: "Typhoon Approaching. Prepare Kits.<br>台风逼近。请准备急救包。" },
+        green: { icon: "🛡️", title: "INFO / 信息", body: "System Check: All Clear.<br>系统检查：一切正常。" }
+    };
+
+    const chatBilingualData = {
+        red: { title: "🔴 URGENT: RED ALERT<br><span style='font-size:0.85em; font-weight:normal;'>紧急：红色预警</span>", body: "Storm surge imminent in your area. All residents must EVACUATE immediately to higher ground.<br><br>风暴潮即将来临。所有居民必须立即撤离到高地。", link: "🔗 Start Navigation / 开始导航", img: "Redstate3.png", color: "#ff3b30" },
+        orange: { title: "🟠 WARNING: ORANGE ALERT<br><span style='font-size:0.85em; font-weight:normal;'>警告：橙色预警</span>", body: "Typhoon Haiku is approaching. Strong winds expected. Prepare emergency kits.<br><br>台风“海葵”正在逼近。预计有强风。请准备急救包。", link: "🔗 View Live Map / 查看实时地图", img: "OrangeState.png", color: "#ff8a00" },
+        green: { title: "🛡️ ALL CLEAR<br><span style='font-size:0.85em; font-weight:normal;'>一切正常</span>", body: "No active threats detected. System is monitoring normally.<br><br>未检测到威胁。系统监控正常。", link: "🔗 Open Map View / 打开地图视图", img: "Home2.png", color: "#3cc37a" }
+    };
+
+    const i18n = {
+        en: { navRed: "Evacuate Now", navRedSub: "3 Routes Available", navOrange: "Shelter Overview", navOrangeSub: "3 Shelters Nearby", navGreen: "You are Safe", navGreenSub: "System Normal" },
+        zh: { navRed: "立即撤离", navRedSub: "3条可用路线", navOrange: "路线预览", navOrangeSub: "附近有3个避难所", navGreen: "我很安全", navGreenSub: "系统正常" }
+    };
+
+    function switchScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => { s.classList.remove('active'); s.classList.add('hidden'); });
+        const active = document.getElementById(screenId); active.classList.remove('hidden'); active.classList.add('active');
+    }
+    function goBackToSplash() { switchScreen('screen-splash'); document.getElementById('notifBanner').classList.remove('show', 'blink-slow', 'blink-fast'); }
+    function goToChat() { switchScreen('screen-chat'); updateChatContent(); }
+    function goToNav() { switchScreen('screen-nav'); setTimeout(() => { if (!map) initMap(); map.invalidateSize(); updateMapContent(); }, 500); }
+
+    function updateChatContent() {
+        const container = document.getElementById('msgContainer'); const title = document.getElementById('msgTitle'); const body = document.getElementById('msgBody'); const link = document.getElementById('msgLink'); const img = document.getElementById('msgImg');
+        const content = chatBilingualData[currentState] || chatBilingualData['green'];
+        container.className = 'message-bubble ' + currentState + '-state';
+        title.innerHTML = content.title; body.innerHTML = content.body; link.textContent = content.link; img.src = content.img; link.style.color = content.color;
+    }
+
+    function initMap() {
+        map = L.map('mobileMap', { zoomControl: false, attributionControl: false }).setView([25.935, 108.530], 15);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20 }).addTo(map);
+        userMarker = L.marker([25.930, 108.520]).addTo(map);
+    }
+
+    function clearLayers() {
+        shelterMarkers.forEach(m => map.removeLayer(m)); routePolylines.forEach(p => map.removeLayer(p));
+        shelterMarkers = []; routePolylines = []; if(userMarker) userMarker.unbindTooltip();
+    }
+
+    function updateMapContent() {
+        const t = i18n[currentLang] || i18n['en'];
+        const navTop = document.getElementById('navTop'); const navTitle = document.getElementById('navTitle'); const navSub = document.getElementById('navSubtitle'); const navIcon = document.getElementById('navIcon'); const bottomMain = document.getElementById('bottomMain');
+        const shelterIcon = L.icon({ iconUrl: 'home4.png', iconSize: [34, 34], iconAnchor: [17, 34] });
+        clearLayers();
+        navTop.className = 'nav-top ' + currentState + '-mode';
+        const userCoords = [25.930, 108.520];
+
+        if(currentState === 'red') {
+            navTitle.textContent = t.navRed; navSub.textContent = t.navRedSub; navIcon.innerText = "↰"; bottomMain.innerText = "Urgent Evacuation";
+            const redShelters = [
+                { coords: [25.935, 108.530], name: "City Hall", status: "RECOMMENDED", cap: "Available", color: "#00e676" },
+                { coords: [25.942, 108.515], name: "Tingdong School", status: "AT CAPACITY", cap: "Full", color: "#ff3b30" },
+                { coords: [25.925, 108.540], name: "Riverside Center", status: "HIGH RISK", cap: "Flooded", color: "#ff3b30" }
+            ];
+            redShelters.forEach(s => {
+                let m = L.marker(s.coords, {icon: shelterIcon}).addTo(map);
+                m.bindPopup(`<div class="pop-header">Shelter: ${s.name}</div><div class="pop-status" style="color: ${s.color};">${s.status}</div><div class="pop-cap">Capacity: ${s.cap}</div>`, { className: 'custom-popup', closeButton: true });
+                shelterMarkers.push(m);
+                let line = L.polyline([userCoords, s.coords], { color: '#ff4d4f', weight: 6, opacity: 0.8 }).addTo(map);
+                routePolylines.push(line);
+            });
+            userMarker.setIcon(L.divIcon({ className: 'leaflet-div-icon', html: `<div style="position: relative; height: 100px; display: flex; justify-content: center; align-items: flex-end;"><div class="danger-pulse" style="position: absolute; bottom: 5px;"></div><img src="RedState1.png" class="bouncing-pin" style="position: relative; z-index: 2; margin-bottom: 15px;"></div>`, iconSize: [50, 100], iconAnchor: [25, 95] }));
+
+        } else if(currentState === 'orange') {
+            navTitle.textContent = t.navOrange; navSub.textContent = t.navOrangeSub; navIcon.innerText = "⚠️"; bottomMain.innerText = "Tap icons for details";
+            const shelters = [
+                { coords: [25.935, 108.530], name: "City Hall Safe Zone", status: "Available", cap: "1200", color: "#00e676" },
+                { coords: [25.942, 108.515], name: "Tingdong Primary School", status: "Status: At Capacity", cap: "650", color: "#448aff" }, 
+                { coords: [25.925, 108.540], name: "Riverside Center", status: "Limited Space", cap: "300", color: "#ffb020" }
+            ];
+            shelters.forEach(s => {
+                let m = L.marker(s.coords, {icon: shelterIcon}).addTo(map);
+                m.bindPopup(`<div class="pop-header">Shelter: ${s.name}</div><div class="pop-status" style="color: ${s.color};">${s.status}</div><div class="pop-cap">Capacity: ${s.cap}</div>`, { className: 'custom-popup', closeButton: true });
+                shelterMarkers.push(m);
+                let line = L.polyline([userCoords, s.coords], { color: '#ffb020', weight: 4, opacity: 0.7, dashArray: '10, 10' }).addTo(map);
+                routePolylines.push(line);
+            });
+            userMarker.setIcon(L.divIcon({ className: 'leaflet-div-icon', html: `<div style="position: relative; height: 100px; display: flex; justify-content: center; align-items: flex-end;"><div class="warning-pulse" style="position: absolute; bottom: 5px;"></div><img src="OrangeState2.png" class="bouncing-pin" style="position: relative; z-index: 2; margin-bottom: 15px;"></div>`, iconSize: [50, 100], iconAnchor: [25, 95] }));
+
+        } else {
+            navTitle.textContent = t.navGreen; navSub.textContent = t.navGreenSub; navIcon.innerText = "🛡️"; bottomMain.innerText = "Online";
+            userMarker.setIcon(L.divIcon({ className: 'leaflet-div-icon', html: `<div style="position: relative; height: 100px; display: flex; justify-content: center; align-items: flex-end;"><div class="safe-pulse" style="position: absolute; bottom: 5px;"></div><img src="GreenState1.png" class="bouncing-pin" style="position: relative; z-index: 2; margin-bottom: 15px;"></div>`, iconSize: [50, 100], iconAnchor: [25, 95] }));
+        }
+    }
+</script>
+</body>
+</html>
