@@ -42,6 +42,10 @@
   <div id="cesiumContainer"></div>
 
   <script>
+
+    Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5YWYwYTdiOS1hNmQzLTRlYzMtOWVmOS01YzY1ZGM2MGI2ZjMiLCJpZCI6MzY0NDk2LCJpYXQiOjE3NjQyNDcxNjN9.AEqypLl5NB-ONvei0d-ToJtE589IpC51cDPf49Stv1U'; 
+
+    
     // 1. Initialize Cesium Viewer
     // Note: This uses a default token. For production, you need your own Ion Token.
     const viewer = new Cesium.Viewer('cesiumContainer', {
