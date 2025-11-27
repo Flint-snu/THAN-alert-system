@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>THAN 3D Alert View</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.104/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.104/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <style>
+    body { margin: 0; padding: 0; overflow: hidden; }
+    #cesiumContainer { width: 100%; height: 100vh; }
+    #uiControls {
+        position: absolute;
+        top: 20px; left: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 15px;
+        border-radius: 8px;
+        color: white;
+        z-index: 100;
+        font-family: sans-serif;
+    }
+    .btn {
+        background: #ff4444;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        cursor: pointer;
+        font-size: 16px;
+        border-radius: 4px;
+        margin-top: 10px;
+    }
+    .btn:hover { background: #cc0000; }
+  </style>
+</head>
+<body>
+
+  <div id="uiControls">
+    <h3>THAN 3D Alert Simulation</h3>
+    <p>Status: <span id="statusText">Normal</span></p>
+    <button class="btn" onclick="triggerAlarm()">Test Alarm (Red)</button>
+  </div>
+
+  <div id="cesiumContainer"></div>
+
+  <script>
+    // 1. Initialize Cesium Viewer
+    // Note: This uses a default token. For production, you need your own Ion Token.
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      terrainProvider: Cesium.createWorldTerrain(),
+      animation: false,
+      timeline: false
+    });
+
+    // 2. Add 3D Buildings (OSM Buildings)
+    viewer.scene.primitives.add(Cesium.createOsmBuildings());
+
+    // 3. Fly to Nay Pyi Taw (Target Location)
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(96.129, 19.745, 1500), // Nay Pyi Taw Coordinates
+      orientation: {
+        heading: Cesium.Math.toRadians(0.0),
+        pitch: Cesium.Math.toRadians(-45.0),
+      }
+    });
+
+    // 4. Create a Speaker Pole location
+    const speakerLocation = Cesium.Cartesian3.fromDegrees(96.129, 19.745);
+
+    // Add a pole visualization
+    viewer.entities.add({
+        position: speakerLocation,
+        cylinder: {
+            length: 20.0,
+            topRadius: 0.5,
+            bottomRadius: 0.5,
+            material: Cesium.Color.GRAY
+        }
+    });
+
+    // 5. Alarm Animation Logic (Sound Wave)
+    let isAlarmActive = false;
+    let currentRadius = 10.0;
+
+    function addSoundWave() {
+        viewer.entities.add({
+            position: speakerLocation,
+            ellipse: {
+                semiMinorAxis: new Cesium.CallbackProperty(() => {
+                    if (!isAlarmActive) return 0;
+                    currentRadius += 5; // Speed of wave
+                    if (currentRadius > 300) currentRadius = 10; // Reset wave
+                    return currentRadius;
+                }, false),
+                semiMajorAxis: new Cesium.CallbackProperty(() => {
+                    if (!isAlarmActive) return 0;
+                    return currentRadius;
+                }, false),
+                material: new Cesium.ColorMaterialProperty(
+                    new Cesium.CallbackProperty(() => {
+                        // Fade out as it gets bigger
+                        const alpha = 1.0 - (currentRadius / 300);
+                        return Cesium.Color.RED.withAlpha(alpha);
+                    }, false)
+                ),
+                height: 20.0 // Height of the wave circle
+            }
+        });
+    }
+
+    // Initialize the wave entity
+    addSoundWave();
+
+    // Trigger Function
+    function triggerAlarm() {
+        isAlarmActive = true;
+        document.getElementById('statusText').innerText = "EMERGENCY ALERT!";
+        document.getElementById('statusText').style.color = "red";
+        
+        // Optional: Play Sound
+        // var audio = new Audio('siren.mp3'); 
+        // audio.play();
+    }
+  </script>
+</body>
+</html>
