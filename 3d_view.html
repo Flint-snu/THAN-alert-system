@@ -46,41 +46,55 @@
     Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5YWYwYTdiOS1hNmQzLTRlYzMtOWVmOS01YzY1ZGM2MGI2ZjMiLCJpZCI6MzY0NDk2LCJpYXQiOjE3NjQyNDcxNjN9.AEqypLl5NB-ONvei0d-ToJtE589IpC51cDPf49Stv1U'; 
 
     
-    // 1. Initialize Cesium Viewer
-    // Note: This uses a default token. For production, you need your own Ion Token.
+    // 1. Initialize Viewer
     const viewer = new Cesium.Viewer('cesiumContainer', {
       terrainProvider: Cesium.createWorldTerrain(),
       animation: false,
-      timeline: false
+      timeline: false,
+      baseLayerPicker: false,
+      shadows: true,
     });
 
-    // 2. Add 3D Buildings (OSM Buildings)
-    viewer.scene.primitives.add(Cesium.createOsmBuildings());
+    // 2. Enable Lighting
+    viewer.scene.globe.enableLighting = true;
+    viewer.scene.globe.depthTestAgainstTerrain = true;
 
-    // 3. Fly to Nay Pyi Taw (Target Location)
-    viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(96.129, 19.745, 1500), // Nay Pyi Taw Coordinates
-      orientation: {
-        heading: Cesium.Math.toRadians(0.0),
-        pitch: Cesium.Math.toRadians(-45.0),
-      }
-    });
-
-    // 4. Create a Speaker Pole location
-    const speakerLocation = Cesium.Cartesian3.fromDegrees(96.129, 19.745);
-
-    // Add a pole visualization
-    viewer.entities.add({
-        position: speakerLocation,
-        cylinder: {
-            length: 20.0,
-            topRadius: 0.5,
-            bottomRadius: 0.5,
-            material: Cesium.Color.GRAY
+    // 3. Add Buildings
+    const buildingsTileset = viewer.scene.primitives.add(Cesium.createOsmBuildings());
+    buildingsTileset.style = new Cesium.Cesium3DTileStyle({
+        color: {
+            conditions: [
+                ['true', 'color("#F2F2F2")']
+            ]
         }
     });
 
-    // 5. Alarm Animation Logic (Sound Wave)
+    // 4. Fly to China Location (Based on your Admin Code: 25.93, 108.52)
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(108.529, 25.933, 1500), // Updated Long, Lat
+      orientation: {
+        heading: Cesium.Math.toRadians(0.0),
+        pitch: Cesium.Math.toRadians(-25.0),
+      }
+    });
+
+    // 5. Speaker Pole Visualization
+    // Updated Location
+    const speakerLocation = Cesium.Cartesian3.fromDegrees(108.529, 25.933);
+
+    viewer.entities.add({
+        position: speakerLocation,
+        cylinder: {
+            length: 40.0,
+            topRadius: 1.0,
+            bottomRadius: 1.0,
+            material: Cesium.Color.CYAN.withAlpha(0.9),
+            outline: true,
+            outlineColor: Cesium.Color.BLACK
+        }
+    });
+
+    // 6. Alarm Animation Logic
     let isAlarmActive = false;
     let currentRadius = 10.0;
 
@@ -90,8 +104,8 @@
             ellipse: {
                 semiMinorAxis: new Cesium.CallbackProperty(() => {
                     if (!isAlarmActive) return 0;
-                    currentRadius += 5; // Speed of wave
-                    if (currentRadius > 300) currentRadius = 10; // Reset wave
+                    currentRadius += 8;
+                    if (currentRadius > 500) currentRadius = 10; 
                     return currentRadius;
                 }, false),
                 semiMajorAxis: new Cesium.CallbackProperty(() => {
@@ -100,28 +114,24 @@
                 }, false),
                 material: new Cesium.ColorMaterialProperty(
                     new Cesium.CallbackProperty(() => {
-                        // Fade out as it gets bigger
-                        const alpha = 1.0 - (currentRadius / 300);
-                        return Cesium.Color.RED.withAlpha(alpha);
+                        const alpha = 1.0 - (currentRadius / 500);
+                        return Cesium.Color.RED.withAlpha(alpha * 0.7);
                     }, false)
                 ),
-                height: 20.0 // Height of the wave circle
+                height: 30.0,
+                outline: true,
+                outlineColor: Cesium.Color.RED
             }
         });
     }
 
-    // Initialize the wave entity
     addSoundWave();
 
-    // Trigger Function
     function triggerAlarm() {
         isAlarmActive = true;
-        document.getElementById('statusText').innerText = "EMERGENCY ALERT!";
-        document.getElementById('statusText').style.color = "red";
-        
-        // Optional: Play Sound
-        // var audio = new Audio('siren.mp3'); 
-        // audio.play();
+        document.getElementById('statusText').innerText = "EMERGENCY ALERT ACTIVATED!";
+        document.getElementById('statusText').style.color = "#ff3333";
+        document.getElementById('statusText').style.fontWeight = "bold";
     }
   </script>
 </body>
