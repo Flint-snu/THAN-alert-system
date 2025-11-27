@@ -2,84 +2,117 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>THAN 3D Alert View</title>
+  <title>THAN 3D Smart City</title>
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.104/Build/Cesium/Cesium.js"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.104/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
   <style>
-    body { margin: 0; padding: 0; overflow: hidden; }
+    body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
     #cesiumContainer { width: 100%; height: 100vh; }
+    
     #uiControls {
         position: absolute;
         top: 20px; left: 20px;
-        background: rgba(0, 0, 0, 0.7);
-        padding: 15px;
-        border-radius: 8px;
+        background: rgba(10, 20, 30, 0.85); /* Dark Glass */
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
         color: white;
         z-index: 100;
-        font-family: sans-serif;
+        width: 250px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     }
+    h2 { margin: 0 0 10px 0; font-size: 18px; color: #4facfe; }
+    p { margin: 5px 0; font-size: 14px; color: #ccc; }
+    
+    .status-box {
+        margin-top: 15px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        text-align: center;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+
     .btn {
-        background: #ff4444;
+        width: 100%;
+        background: linear-gradient(to right, #ff416c, #ff4b2b);
         color: white;
         border: none;
-        padding: 10px 20px;
+        padding: 12px;
         cursor: pointer;
         font-size: 16px;
-        border-radius: 4px;
-        margin-top: 10px;
+        font-weight: bold;
+        border-radius: 6px;
+        margin-top: 20px;
+        transition: transform 0.2s;
     }
-    .btn:hover { background: #cc0000; }
+    .btn:active { transform: scale(0.98); }
+    .btn:hover { box-shadow: 0 0 10px #ff4b2b; }
   </style>
 </head>
 <body>
 
   <div id="uiControls">
-    <h3>THAN 3D Alert Simulation</h3>
-    <p>Status: <span id="statusText">Normal</span></p>
-    <button class="btn" onclick="triggerAlarm()">Test Alarm (Red)</button>
+    <h2>THAN Smart City</h2>
+    <p>Location: Rongjiang Demo Zone</p>
+    <div id="statusBox" class="status-box" style="color: #00ff88;">SYSTEM NORMAL</div>
+    <button class="btn" id="alarmBtn">⚠️ ACTIVATE ALARM</button>
   </div>
 
   <div id="cesiumContainer"></div>
 
   <script>
-
+    // ⚠️ YOUR TOKEN HERE (Token မထည့်ရင် ကမ္ဘာလုံးကြီးပဲ မြင်ရပါမယ်)
     Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5YWYwYTdiOS1hNmQzLTRlYzMtOWVmOS01YzY1ZGM2MGI2ZjMiLCJpZCI6MzY0NDk2LCJpYXQiOjE3NjQyNDcxNjN9.AEqypLl5NB-ONvei0d-ToJtE589IpC51cDPf49Stv1U'; 
 
-    
-   // 1. Initialize Viewer
+    // 1. Setup Viewer (Disable default UI for cleaner look)
     const viewer = new Cesium.Viewer('cesiumContainer', {
       terrainProvider: Cesium.createWorldTerrain(),
       animation: false,
       timeline: false,
+      navigationHelpButton: false,
+      homeButton: false,
+      geocoder: false,
       baseLayerPicker: false,
-      shadows: true,
+      sceneModePicker: false,
       selectionIndicator: false,
-      infoBox: false
+      infoBox: false,
     });
 
-    // 2. Enable Lighting
-    viewer.scene.globe.enableLighting = true;
-    viewer.scene.globe.depthTestAgainstTerrain = true;
+    // 2. Camera Settings (Focus on a specific spot)
+    const centerLon = 108.525;
+    const centerLat = 25.935;
+    const centerHeight = 400; // Camera Height
 
-    // Center Location (China Coordinates)
-    const centerLon = 108.52;
-    const centerLat = 25.93;
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(centerLon, centerLat - 0.005, centerHeight),
+      orientation: {
+        heading: Cesium.Math.toRadians(0.0), // North
+        pitch: Cesium.Math.toRadians(-20.0), // Angle
+      }
+    });
+
+    // 3. GENERATE DUMMY CITY (Since real data is flat)
+    // We create random white boxes to simulate a city
     const centerPoint = Cesium.Cartesian3.fromDegrees(centerLon, centerLat);
+    const gridSize = 0.0008; // Distance between buildings
 
-    // 3. Create "Dummy City" (Since rural areas lack OSM buildings)
-    // We will create a grid of boxes to represent a town
-    const gridSize = 0.001; // Spacing between buildings
-    for (let x = -3; x <= 3; x++) {
-        for (let y = -3; y <= 3; y++) {
-            if (x === 0 && y === 0) continue; // Leave center empty for Speaker
+    for (let x = -4; x <= 4; x++) {
+        for (let y = -4; y <= 4; y++) {
+            // Skip center for the Speaker
+            if (x === 0 && y === 0) continue; 
 
-            const height = 20 + Math.random() * 40; // Random height 20m-60m
-            
+            // Create Building
+            const posX = centerLon + (x * gridSize);
+            const posY = centerLat + (y * gridSize);
+            const height = 30 + Math.random() * 50; // Random height
+
             viewer.entities.add({
-                position: Cesium.Cartesian3.fromDegrees(centerLon + (x * gridSize), centerLat + (y * gridSize), height / 2),
+                position: Cesium.Cartesian3.fromDegrees(posX, posY, height / 2),
                 box: {
-                    dimensions: new Cesium.Cartesian3(80.0, 80.0, height),
-                    material: Cesium.Color.WHITE.withAlpha(0.9),
+                    dimensions: new Cesium.Cartesian3(60.0, 60.0, height),
+                    material: Cesium.Color.fromCssColorString('#F5F5F5').withAlpha(0.9), // White Glass look
                     outline: true,
                     outlineColor: Cesium.Color.BLACK
                 }
@@ -87,68 +120,68 @@
         }
     }
 
-    // 4. Fly Camera Closer (Look at the center)
-    viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(centerLon, centerLat - 0.01, 800), // Height 800m
-      orientation: {
-        heading: Cesium.Math.toRadians(0.0), // Facing North
-        pitch: Cesium.Math.toRadians(-20.0), // Look down slightly
-      }
-    });
-
-    // 5. Huge Speaker Pole (Visual for Demo)
-    viewer.entities.add({
-        position: centerPoint,
+    // 4. Create The GIANT SPEAKER POLE
+    const speakerEntity = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(centerLon, centerLat, 40),
         cylinder: {
-            length: 150.0, // Make it TALL so we can see it
-            topRadius: 5.0,
-            bottomRadius: 5.0,
-            material: Cesium.Color.CYAN.withAlpha(0.9), // Neon Blue
+            length: 80.0,
+            topRadius: 2.0,
+            bottomRadius: 4.0,
+            material: Cesium.Color.CYAN, // Neon Blue
             outline: true,
             outlineColor: Cesium.Color.BLACK
         }
     });
 
-    // 6. Alarm Animation Logic
+    // 5. BUTTON & ALARM LOGIC
     let isAlarmActive = false;
-    let currentRadius = 10.0;
+    let waveEntities = []; // Store waves to manage them
 
-    function addSoundWave() {
+    document.getElementById('alarmBtn').addEventListener('click', function() {
+        if (isAlarmActive) return; // Prevent double click
+        
+        isAlarmActive = true;
+        
+        // Update UI
+        const statusBox = document.getElementById('statusBox');
+        statusBox.innerText = "🚨 EMERGENCY ALERT 🚨";
+        statusBox.style.color = "red";
+        statusBox.style.animation = "blink 1s infinite"; // We can add CSS blink later if needed
+        this.innerText = "BROADCASTING...";
+        this.style.background = "#555";
+
+        // Start Animation Loop
+        startWaveAnimation();
+    });
+
+    function startWaveAnimation() {
+        // Create a growing circle (Wave)
+        let radius = 10;
+        
         viewer.entities.add({
             position: centerPoint,
             ellipse: {
                 semiMinorAxis: new Cesium.CallbackProperty(() => {
-                    if (!isAlarmActive) return 0;
-                    currentRadius += 15; // Speed up
-                    if (currentRadius > 1200) currentRadius = 10; // Wider range
-                    return currentRadius;
+                    radius += 15; // Speed
+                    if (radius > 1000) radius = 10; // Reset
+                    return radius;
                 }, false),
                 semiMajorAxis: new Cesium.CallbackProperty(() => {
-                    if (!isAlarmActive) return 0;
-                    return currentRadius;
+                    return radius;
                 }, false),
                 material: new Cesium.ColorMaterialProperty(
                     new Cesium.CallbackProperty(() => {
-                        const alpha = 1.0 - (currentRadius / 1200);
-                        return Cesium.Color.RED.withAlpha(alpha * 0.6);
+                        let alpha = 1.0 - (radius / 1000);
+                        return Cesium.Color.RED.withAlpha(alpha * 0.7);
                     }, false)
                 ),
-                height: 100.0, // Float above ground
+                height: 10.0,
                 outline: true,
                 outlineColor: Cesium.Color.RED
             }
         });
     }
 
-    addSoundWave();
-
-    // Trigger Function
-    function triggerAlarm() {
-        isAlarmActive = true;
-        document.getElementById('statusText').innerText = "EMERGENCY ALERT ACTIVATED!";
-        document.getElementById('statusText').style.color = "#ff3333";
-        document.getElementById('statusText').style.fontWeight = "bold";
-    }
   </script>
 </body>
 </html>
