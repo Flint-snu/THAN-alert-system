@@ -46,49 +46,64 @@
     Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5YWYwYTdiOS1hNmQzLTRlYzMtOWVmOS01YzY1ZGM2MGI2ZjMiLCJpZCI6MzY0NDk2LCJpYXQiOjE3NjQyNDcxNjN9.AEqypLl5NB-ONvei0d-ToJtE589IpC51cDPf49Stv1U'; 
 
     
-    // 1. Initialize Viewer
+   // 1. Initialize Viewer
     const viewer = new Cesium.Viewer('cesiumContainer', {
       terrainProvider: Cesium.createWorldTerrain(),
       animation: false,
       timeline: false,
       baseLayerPicker: false,
       shadows: true,
+      selectionIndicator: false,
+      infoBox: false
     });
 
     // 2. Enable Lighting
     viewer.scene.globe.enableLighting = true;
     viewer.scene.globe.depthTestAgainstTerrain = true;
 
-    // 3. Add Buildings
-    const buildingsTileset = viewer.scene.primitives.add(Cesium.createOsmBuildings());
-    buildingsTileset.style = new Cesium.Cesium3DTileStyle({
-        color: {
-            conditions: [
-                ['true', 'color("#F2F2F2")']
-            ]
-        }
-    });
+    // Center Location (China Coordinates)
+    const centerLon = 108.52;
+    const centerLat = 25.93;
+    const centerPoint = Cesium.Cartesian3.fromDegrees(centerLon, centerLat);
 
-    // 4. Fly to China Location (Based on your Admin Code: 25.93, 108.52)
+    // 3. Create "Dummy City" (Since rural areas lack OSM buildings)
+    // We will create a grid of boxes to represent a town
+    const gridSize = 0.001; // Spacing between buildings
+    for (let x = -3; x <= 3; x++) {
+        for (let y = -3; y <= 3; y++) {
+            if (x === 0 && y === 0) continue; // Leave center empty for Speaker
+
+            const height = 20 + Math.random() * 40; // Random height 20m-60m
+            
+            viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(centerLon + (x * gridSize), centerLat + (y * gridSize), height / 2),
+                box: {
+                    dimensions: new Cesium.Cartesian3(80.0, 80.0, height),
+                    material: Cesium.Color.WHITE.withAlpha(0.9),
+                    outline: true,
+                    outlineColor: Cesium.Color.BLACK
+                }
+            });
+        }
+    }
+
+    // 4. Fly Camera Closer (Look at the center)
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(108.529, 25.933, 1500), // Updated Long, Lat
+      destination: Cesium.Cartesian3.fromDegrees(centerLon, centerLat - 0.01, 800), // Height 800m
       orientation: {
-        heading: Cesium.Math.toRadians(0.0),
-        pitch: Cesium.Math.toRadians(-25.0),
+        heading: Cesium.Math.toRadians(0.0), // Facing North
+        pitch: Cesium.Math.toRadians(-20.0), // Look down slightly
       }
     });
 
-    // 5. Speaker Pole Visualization
-    // Updated Location
-    const speakerLocation = Cesium.Cartesian3.fromDegrees(108.529, 25.933);
-
+    // 5. Huge Speaker Pole (Visual for Demo)
     viewer.entities.add({
-        position: speakerLocation,
+        position: centerPoint,
         cylinder: {
-            length: 40.0,
-            topRadius: 1.0,
-            bottomRadius: 1.0,
-            material: Cesium.Color.CYAN.withAlpha(0.9),
+            length: 150.0, // Make it TALL so we can see it
+            topRadius: 5.0,
+            bottomRadius: 5.0,
+            material: Cesium.Color.CYAN.withAlpha(0.9), // Neon Blue
             outline: true,
             outlineColor: Cesium.Color.BLACK
         }
@@ -100,12 +115,12 @@
 
     function addSoundWave() {
         viewer.entities.add({
-            position: speakerLocation,
+            position: centerPoint,
             ellipse: {
                 semiMinorAxis: new Cesium.CallbackProperty(() => {
                     if (!isAlarmActive) return 0;
-                    currentRadius += 8;
-                    if (currentRadius > 500) currentRadius = 10; 
+                    currentRadius += 15; // Speed up
+                    if (currentRadius > 1200) currentRadius = 10; // Wider range
                     return currentRadius;
                 }, false),
                 semiMajorAxis: new Cesium.CallbackProperty(() => {
@@ -114,11 +129,11 @@
                 }, false),
                 material: new Cesium.ColorMaterialProperty(
                     new Cesium.CallbackProperty(() => {
-                        const alpha = 1.0 - (currentRadius / 500);
-                        return Cesium.Color.RED.withAlpha(alpha * 0.7);
+                        const alpha = 1.0 - (currentRadius / 1200);
+                        return Cesium.Color.RED.withAlpha(alpha * 0.6);
                     }, false)
                 ),
-                height: 30.0,
+                height: 100.0, // Float above ground
                 outline: true,
                 outlineColor: Cesium.Color.RED
             }
@@ -127,6 +142,7 @@
 
     addSoundWave();
 
+    // Trigger Function
     function triggerAlarm() {
         isAlarmActive = true;
         document.getElementById('statusText').innerText = "EMERGENCY ALERT ACTIVATED!";
